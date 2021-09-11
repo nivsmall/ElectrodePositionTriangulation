@@ -9,17 +9,25 @@ function fun=errorFun_3d(x)
 % prefun1(eye( size( prefun1 ) )==1) = 0; %zeros all the terms in the diagonal which were zero before and became inf after log
 % prefun2 = sum(sum(   (prefun1).^6   )) ;
 % fun = prefun2;
-global Pot_Mat len;
+
+
+% the computed loss/objective function:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                   ln(Vij-Vo)-ln(Aj)+ln(rij)*alpha                   %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+global Pot_Mat len needs_clean;
 alpha = x(len+1);
 v0 = x(len+1,2);
 r = dist(x(1:len,1:3)');
 prefun = zeros(len);
+% exclude noisy measurements:
+Pot_Mat = Pot_Mat.*~needs_clean + needs_clean.*(1+v0).*10^12;
 for idx = 1:len
     for jdx = 1:len
         if idx == jdx
             continue
         end
-        prefun(idx,jdx) = log(abs(Pot_Mat(idx,jdx))-v0) - log(x(jdx,4)) + alpha*log(r(idx,jdx));
+        prefun(idx,jdx) = log(abs(Pot_Mat(idx,jdx)).*10^-12-v0) - log(x(jdx,4)) - alpha*log(r(idx,jdx));
     end
 end
 fun = sum(sum(prefun.^2));

@@ -1,67 +1,118 @@
 clear
 global Pot_Mat len A_Vect;
 num_trials = 10;
+load_data = true;
+read_data = true;
 
-MEAobj = MCRackRecording('E:\Itamar\project\Biological Project\Recordings\Recording1.mcd');
-T=MEAobj.getTrigger;  
-M=MEAobj.getData(1:120,T{1}+200,30);
-load layout_100_12x12.mat
-% figure
-% WaveformPhysicalSpacePlot(1:120,squeeze(M(:,1,:)),En,0)
-mM=min(M,[],3);
-% figure
-% IntensityPhysicalSpacePlot(1:120,mM(:,1),En)
-Pot_Mat = zeros(120);
-for idx = 1:num_trials
-    Pot_Mat = Pot_Mat + mM(:,120*(idx-1)+1:120*idx);
+%% Read the data:
+%%%% Data Flow prior MATLAB: MCRack -> .cmd file -> MCDataManager -> .h5 file %%%%
+if load_data
+    samplerate = 1/10000;       % 10[kHz]
+    if read_data
+        load('continuousStream51to60.mat');
+        load('continuousStream1to50.mat');
+        load('triggers_51to60.mat');
+        load('triggers_1to50.mat');
+        load('ChannelDataTimeStamps_51to60.mat');
+        load('ChannelDataTimeStamps_1to50.mat');
+    else
+        % configure the segment of data to read:
+        cfg_1to50=[];
+        cfg_1to50.window=[55496  15008090].*samplerate; % data slicing w.r.t time [s] [5549.7, 1999894.1] / 2031874 / 5026385 / 10037200]
+        cfg_51to60=[];
+        cfg_51to60.window=[42200 3016750].*samplerate;  % 1st trigger @ [4220.1, 401491.9] 421506 / 102040.8 / 2218212]
+        data_path_1to50 = 'C:/Users/nivsm/Documents/FinalProject/MEA_experiments/MultichannelDataManager/50_first_excites_approx20trials0001.h5';
+        data_path_51to60 = 'C:/Users/nivsm/Documents/FinalProject/MEA_experiments/MultichannelDataManager/51to60_excites_approx20trials.h5';
+        data_1to50 = McsHDF5.McsData(data_path_1to50);
+        data_51to60 = McsHDF5.McsData(data_path_51to60);
+        % triggers:                 1 X #excitations
+        triggers_51to60 = data_51to60.Recording{1, 1}.EventStream{1, 1}.readPartialEventData(cfg_51to60).Events{1, 1};
+        %save('triggers_51to60.mat', 'triggers_51to60');
+        triggers_1to50 = data_1to50.Recording{1, 1}.EventStream{1, 1}.readPartialEventData(cfg_1to50).Events{1, 1};
+        %save('triggers_1to50.mat', 'triggers_1to50');
+        % continuous data stream:   #channels X #samples
+        M_51to60 = data_51to60.Recording{1, 1}.AnalogStream{1, 2}.readPartialChannelData(cfg_51to60);
+        M_51to60Cont =M_51to60.ChannelData;
+        ChannelDataTimeStamps_51to60 = M_51to60.ChannelDataTimeStamps;
+        save('ChannelDataTimeStamps_51to60.mat', 'ChannelDataTimeStamps_51to60');
+        %save('continuousStream51to60.mat', 'M_51to60Cont')
+        M_1to50 = data_1to50.Recording{1, 1}.AnalogStream{1, 2}.readPartialChannelData(cfg_1to50);
+        M_1to50Cont =M_1to50.ChannelData;
+        ChannelDataTimeStamps_1to50 = M_1to50.ChannelDataTimeStamps;
+        save('ChannelDataTimeStamps_1to50.mat', 'ChannelDataTimeStamps_1to50');
+        %save('continuousStream1to50.mat', 'M_1to50Cont')
+    end
+
+    % extract pulses, rearrange data:
+    trig_indices_1to50 = trigger2triggerIndices(triggers_1to50, ChannelDataTimeStamps_1to50);
+    trig_indices_51to60 = trigger2triggerIndices(triggers_51to60, ChannelDataTimeStamps_51to60);
+    M_1to50 = continuousStream2triggered(M_1to50Cont, trig_indices_1to50, 50, num_trials);
+    M_51to60 = continuousStream2triggered(M_51to60Cont, trig_indices_51to60, 10, num_trials);
+
+
+    % Potential Matrix - coloumn # is the exciting electrode, row # is the
+    % measuring electrode
+    Pot_Mat = abs(horzcat(M_1to50, M_51to60));
+    save('Pot_Mat_experiment_24_2_2021_X2.mat', 'Pot_Mat')
+    return
+    % TODO: verify setup of Pot_Mat is correct
+    %for idx = 1:num_trials
+    %    Pot_Mat = Pot_Mat + mM(:,60*(idx-1)+1:60*idx);
+    %end
+else
+    Pot_Mat = load('Pot_Mat_experiment_24_2_2021.mat');
+    Pot_Mat = Pot_Mat.Pot_Mat;
 end
-Pot_Mat = abs(Pot_Mat).*~eye(120)/num_trials;
 
-%% remove bad electrodes - in this case 3, 64, 98, 119
-bad_electrodes = [3 64 98 119];
+%% remove bad electrodes - in this case 15 is REF/GND thus it is not used
+% use the mea60layout-> mea60Pin2index to enter electrode by index
+
+bad_electrodes = [15];
 
 for idx = sort(bad_electrodes,'descend')
     Pot_Mat(idx,:) = [];
     Pot_Mat(:,idx) = [];
 end
 
-%verify_matrix(Pot_Mat)
+
 
 %% defining hyperparameters
-dX=         200; %distance between electrodes
+dX=         500; %distance between electrodes
 alpha0=     1.5; %exponential decay constant
 noiseStd=   0.1; 
 len =       length(Pot_Mat); %number of electrodes
 
 %% Regression analysis of potentials and distances to see if data conforms to model
-load('Solution_Coordinates.mat')
-Coordinates = Coordinates *1e3;
+load('mea60layout.mat');
+%load('Solution_Coordinates.mat')
+Coordinantes = mea60_coordinantes;
+% TODO: eliminate Z axis in Coordinantes, ->near_sol accordingly
 for idx = sort(bad_electrodes,'descend')
-    Coordinates(idx,:) =[];
+    Coordinantes(idx,:) =[];
 end
-r = dist(Coordinates');
+r = dist(Coordinantes.');
 v=Pot_Mat;
 r(logical(eye(length(r)))) = 0;
 v(logical(eye(length(Pot_Mat)))) = inf;
 
-
-modelfun = @(c,x)(c(1)*(x.^-c(2)))+c(3);
+% model function: Vij = Aj*rij^(-alpha) + Const
+modelfun = @(c,x)(c(1).*(x.^-c(2)))+c(3);
 modelfit = cell(len,1);
 reg_Coef = zeros(len,3);
 R_sq = zeros(len,1);
 for idx = 1:len
-    x = r(:,idx);
+    x = r(:,idx).*10^-6;
     x(idx) = [];
-    y = v(:,idx);
+    y = v(:,idx).*10^-12;
     y(idx) = [];
-    
-    modelfit{idx} = fitnlm(x,y,modelfun,[0.5 0.5 0.5]);
+                        %initial values:[Aj,alpha,Const]
+    modelfit{idx} = fitnlm(x,y,modelfun,[10^-08 1 10^-5]);
     reg_Coef(idx,:) = modelfit{idx}.Coefficients.Estimate';
     R_sq(idx) = modelfit{idx}.Rsquared.Adjusted;
     
-    %plot(x,modelfit{idx}.Fitted)
+    plot(x,modelfit{idx}.Fitted)
     
-end
+ end
 residuals = zeros(len-1);
 for idx = 1:len
     tab = table2array(modelfit{idx}.Variables);
@@ -70,9 +121,16 @@ for idx = 1:len
     residuals(idx,:) = restab(xorder);
     
 end
+figure
+plot(mean(abs(residuals)))
+title("residuals plot")
+
+
 res_sum = [];
 sum_size = [];
 domain = [];
+% since a distance between electrodes can repeat, lets average the fit for
+% those cases:
 for idx = 1:len
    range = table2array(modelfit{idx}.Variables(:,1)); 
    res = table2array(modelfit{idx}.Residuals(:,1));
@@ -92,11 +150,11 @@ res_avg = res_sum./sum_size;
 [~,domain_order] = sort(domain);
 figure
 plot(domain(domain_order),res_avg(domain_order))
-           
-    
-plot(mean(abs(residuals)))
+title("Residual vs electrode distance plot")
+
+
 %%plotting a single regression
-reg_num = 32;
+reg_num = 58;
 figure
 tab = table2array(modelfit{reg_num}.Variables);
 [x,xorder]=sort(tab(:,1));
@@ -106,21 +164,29 @@ plot(x,y,'.r')
 hold on
 plot(x,yhat)
 title(['Regression of potential decay from electrode ' num2str(reg_num)])
-xlabel('Distance [mm]')
-ylabel('Potential [mV]')
+xlabel('Distance [m]')
+ylabel('Potential [V]')
 %%
+% We want to define constraints to the optimization problem:
+% Coordinantes: physical contraints in terms of physical distances
+% Elec_constants: ???
+% alpha: must be larger than zero (otherwise exponent is not deminishing, as physically expected) ???
+% We assume Aj and Ai should be similar, so our contraint is on A's standard deviation stdMax = 2
+
 A =         [];
 B =         [];
 Aeq =       [];
 beq =       [];
-lb =        [-5000.*ones(len,3) , 1e-5*ones(len,1) ; 0 , -1000 , 0 , 0];
-ub =        [5000.*ones(len,3) , 10000*ones(len,1) ; 3 , 1000 , 0 , 0];
-
-nonlcon =   [];
-options1 =  optimoptions('fmincon','Display','final-detailed','OptimalityTolerance',1e-20,'StepTolerance',1e-20,'ConstraintTolerance',1e-16,'MaxIterations',10000000,'MaxFunctionEvaluations',1000000,'Algorithm','sqp');
-options2 =  optimoptions('fmincon','Display','final-detailed','OptimalityTolerance',1e-20,'StepTolerance',1e-20,'ConstraintTolerance',1e-16,'MaxIterations',100000000,'MaxFunctionEvaluations',100000000);
-options3 =  optimoptions('fminunc','Display','final-detailed','OptimalityTolerance',1e-20,'MaxIterations',1000000,'MaxFunctionEvaluations',1000000);
-options4 =  optimset('Display','final-detailed','MaxIter',1000000,'MaxFunEvals',100000,'TolFun',1e-10);
+%           [Coordinantes                    ,     A_vect      ;alpha,   Vo      ,   ,  ]
+lb =        [     zeros(len,3)               ,1e-5*ones(len,1) ; 0 , -1000^10^-6 , 0 , 0];
+ub =        [0.050.*ones(len,2) zeros(len, 1),1e4*ones(len,1)  ; 4 , 1000^10^-6 , 0 , 0];
+nonlcon =   [@(A) A_VectConstraint];
+%reference for fmincon optimoptions
+%https://www.mathworks.com/help/releases/R2020a/optim/ug/fmincon.html?browser=F1help#busog7r-options
+options1 =  optimoptions('fmincon','Display','iter','OptimalityTolerance',1e-20,'StepTolerance',1e-20,'ConstraintTolerance',1e-16,'MaxIterations',1e6,'MaxFunctionEvaluations',1e5,'Algorithm','sqp', 'PlotFcn', 'optimplotfval');
+%options2 =  optimoptions('fmincon','Display','final-detailed','OptimalityTolerance',1e-20,'StepTolerance',1e-20,'ConstraintTolerance',1e-16,'MaxIterations',100000000,'MaxFunctionEvaluations',100000000);
+%options3 =  optimoptions('fminunc','Display','final-detailed','OptimalityTolerance',1e-20,'MaxIterations',1000000,'MaxFunctionEvaluations',1000000);
+%options4 =  optimset('Display','final-detailed','MaxIter',1000000,'MaxFunEvals',100000,'TolFun',1e-10);
 
 
 %%
@@ -141,27 +207,28 @@ options4 =  optimset('Display','final-detailed','MaxIter',1000000,'MaxFunEvals',
 % A_vect = A_struct.Newt.Vector;
 v0 = Pot_Mat;
 v0(logical(eye(len))) = inf;
-v0 = min(min(v0))-eps;
+v0 = min(min(v0))*10^-12-eps;
 A_Vect = reg_Coef(:,1);
 alpha = mean(reg_Coef(:,2));
-near_sol = [Coordinates A_Vect ;alpha v0 0 0];
+near_sol_ = [Coordinantes.*10^-6 A_Vect ;alpha v0 0 0];
+near_sol = near_sol_ + near_sol_.*abs([noiseStd*randn(len,3)  noiseStd*(randn(len,1)) ; 0 0 0 0]);
 %% importing impedances from optimization and testing value at initial conditions with approximated impedances
-Con_As = load('Con_As.mat');
-GA_As = load('GA_As.mat');
-Newt_As = load('Newt_As.mat');
-PSO_As = load('PSO_As.mat');
-SQP_As = load('SQP_As.mat');
+%Con_As = load('Con_As.mat');
+%GA_As = load('GA_As.mat');
+%Newt_As = load('Newt_As.mat');
+%PSO_As = load('PSO_As.mat');
+%SQP_As = load('SQP_As.mat');
 
-Con_As.init_val = errorFun_3d([Coordinates Con_As.Con.Vector; alpha v0 0 0])
-GA_As.init_val = errorFun_3d([Coordinates GA_As.GA.Vector'; alpha v0 0 0])
-Newt_As.init_val = errorFun_3d([Coordinates Newt_As.Newt.Vector; alpha v0 0 0])
-PSO_As.init_val = errorFun_3d([Coordinates PSO_As.PSO.Vector'; alpha v0 0 0])
-SQP_As.init_val = errorFun_3d([Coordinates SQP_As.SQP.Vector; alpha v0 0 0])
-regression_As.init_val = errorFun_3d([Coordinates A_Vect; alpha v0 0 0])
-% x0 = [Coordinates A_Vect; alpha v0 0 0];
-% Sol_Vector = fmincon(@(x) errorFun_3d(x),x0,A,B,Aeq,beq,lb,ub,nonlcon,options1);
+%Con_As.init_val = errorFun_3d([Coordinantes Con_As.Con.Vector; alpha v0 0 0])
+%GA_As.init_val = errorFun_3d([Coordinantes GA_As.GA.Vector'; alpha v0 0 0])
+%Newt_As.init_val = errorFun_3d([Coordinantes Newt_As.Newt.Vector; alpha v0 0 0])
+%PSO_As.init_val = errorFun_3d([Coordinantes PSO_As.PSO.Vector'; alpha v0 0 0])
+%SQP_As.init_val = errorFun_3d([Coordinantes SQP_As.SQP.Vector; alpha v0 0 0])
+%regression_As.init_val = errorFun_3d([Coordinantes A_Vect; alpha v0 0 0])
+x0 = near_sol;
+Sol_Vector = fmincon(@(x) errorFun_3d(x),x0,A,B,Aeq,beq,lb,ub,nonlcon,options1);
 
-
+return
 
 
 
@@ -208,7 +275,7 @@ SQP.Mean_As =       zeros(n,1);
 
 for idx = 1:n
 
-    x0(:,:,idx) = near_sol+[noiseStd*randn(len,2) noiseStd*0.5*abs(randn(len,1)) noiseStd*abs(randn(len,1)) ; noiseStd*abs(randn) 0 0 0];
+    x0(:,:,idx) = near_sol;
 %     x0(:,:,idx) = near_sol;
     %Con(InteriorPoint)
 %     tic
