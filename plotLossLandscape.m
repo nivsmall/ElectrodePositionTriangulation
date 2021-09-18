@@ -20,13 +20,14 @@ function [] = plotLossLandscape(titleStr)
             if oneAtATime
                 testPointsMat(ydx,xdx,3) = ObjectiveFunctionOneAtaTime([x, y]);
             else
+                ElecToView = 11;
                 testCoord = Coordinates(:,1:2);
-                testCoord(1, 1:2) = testCoord(1, 1:2)+[x, y];
+                testCoord(ElecToView, 1:2) = testCoord(ElecToView, 1:2)+[x, y];
                 localError = errorFun_2d(testCoord);
                 testPointsMat(ydx,xdx,3) = localError;
                 if localError < minVal
                     minVal = localError;
-                    globalMinimum = testCoord(1, 1:2);
+                    globalMinimum = testCoord(ElecToView, 1:2);
                     Y=ydx;
                     X=xdx;
                 end
