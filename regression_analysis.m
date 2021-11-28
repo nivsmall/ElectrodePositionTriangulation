@@ -90,7 +90,7 @@ residuals = res_avg(domain_order);
 
 %%plotting a set of regressions
 if show
-    for reg_num = 33:34
+    for reg_num = 1:1
         figure
         tab = table2array(modelfit{reg_num}.Variables);
         [x,xorder]=sort(tab(:,1));

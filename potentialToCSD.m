@@ -24,9 +24,9 @@ for jdx = 1:len
     plotMat(6,1,1) = (plotMat(5, 1, 1)+plotMat(7, 1, 1))/2;
     plotMat(6,1,2) = (plotMat(5, 1, 2)+plotMat(7, 1, 2))/2;
     %plotMat(Y,X,3) = ( spatialPotMat(Y-1,X)+spatialPotMat(Y,X-1)+spatialPotMat(Y,X+1)+spatialPotMat(Y+1,X) ) / 4;
-%     plotMat(Y, X,3) = inf;
-%     figure;
-%     surfacePlot = surf(plotMat(:,:, 1), plotMat(:,:,2), plotMat(:,:,3));
+    plotMat(Y, X,3) = inf;
+    %figure;
+    %surfacePlot = surf(plotMat(:,:, 1), plotMat(:,:,2), plotMat(:,:,3));
 %     daspect([500 500 10^8]);
 %     if Y<10
 %         datatip(surfacePlot, 'DataIndex', (X-1)*10+Y+1);
@@ -42,7 +42,7 @@ for jdx = 1:len
     %saveas(surfacePlot, 'C:\Users\nivsm\Documents\FinalProject\images and plots\CSDPlots\CSDMeasuremetns_ActuationBy'+actuatorStr+'.png');
 
 
-for idx = 1:len
+    for idx = 1:len
         y =  Coordinates(idx, 1)/500 + 1;
         x = Coordinates(idx, 2)/500 + 1;
         CSD(idx, jdx) = laplacian_(y, x);

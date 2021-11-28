@@ -18,6 +18,7 @@ plot(X_TLabel, Y_TLabel, 'ob');
 plot(X_results, Y_results,'*r');
 legend('Optimization Initialization', 'True Label', 'Optimization Results');
 title(titleStr);
+axis equal;
 hold off;
 end
 

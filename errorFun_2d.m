@@ -3,7 +3,7 @@ function fun=errorFun_2d(x)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                   ln(Vij-Vo)-ln(Aj)+ln(rij)*alpha                   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-global Pot_Mat len x0_init coord_coeff A_coeff alpha_coeff distFilterMask  CSDTrain CSD alpha_mu A_Vect Coordinates;
+global Pot_Mat len x0_init coord_coeff A_coeff alpha_coeff distFilterMask  CSDTrain CSD harmonicSignal;
 
 prefun = zeros(len);
 % exclude noisy measurements:
@@ -35,6 +35,12 @@ elseif  ~alpha_coeff && ~coord_coeff && A_coeff
     alpha = x0_init(len+1);
 end
 
+if harmonicSignal
+    magOrder=15.5;
+else
+    magOrder = 12;
+end
+
 
 for idx = 1:len
     for jdx = 1:len
@@ -46,9 +52,9 @@ for idx = 1:len
         end
         if CSDTrain
             %prefun(idx,jdx) = CSD(idx, jdx) - Pot_Mat(idx, jdx)*A_Vector(jdx)*r(idx, jdx);
-            prefun(idx, jdx) = CSD(idx, jdx) - A_Vector(jdx)*r(idx, jdx)*r(idx, jdx)^alpha;
-        else %+3.5
-            prefun(idx,jdx) = log(abs(Pot_Mat(idx,jdx)*10^-(12+3.5))) - log(A_Vector(jdx)) - alpha*log(r(idx,jdx));
+            prefun(idx, jdx) = CSD(idx, jdx)*10^-4 - A_Vector(jdx)*r(idx, jdx)*r(idx, jdx)^alpha;
+        else
+            prefun(idx,jdx) = log(abs(Pot_Mat(idx,jdx)*10^-(magOrder))) - log(A_Vector(jdx)) - alpha*log(r(idx,jdx));
         end
     end
 end
